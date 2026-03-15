@@ -18,6 +18,8 @@ clawhub install rhaios-staging
 
 ```
 /plugin marketplace add Rhaios/rhaios-skills
+/plugin install rhaios-toolkit
+/reload-plugins
 ```
 
 ### npm / bun / pnpm
