@@ -14,11 +14,11 @@ import {
   type Hex,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { callApi, DETECTED_ENV } from '../api.ts';
-import { runPreparePreflight } from './preflight.ts';
-import { createSigner, getPrepareGasInfo, signPreparedPayload } from './signing.ts';
-import { isRecord, type PrepareSignExecuteRequest, type ResolvedChain } from './types.ts';
-import { PreflightError } from './types.ts';
+import { callApi, DETECTED_ENV } from '../src/client.ts';
+import { runPreparePreflight } from '../src/preflight.ts';
+import { createSigner, getPrepareGasInfo, signPreparedPayload } from '../src/signing.ts';
+import { isRecord, type PrepareSignExecuteRequest, type ResolvedChain } from '../src/types.ts';
+import { PreflightError } from '../src/types.ts';
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const HEX_RE = /^0x[0-9a-fA-F]*$/;

@@ -1,7 +1,7 @@
 import { PrivyClient } from '@privy-io/node';
 import type { Address, Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { HEALTH_URL } from '../api.ts';
+import { HEALTH_URL } from './client.ts';
 import {
   type HealthSnapshot,
   type PrepareSignExecuteRequest,

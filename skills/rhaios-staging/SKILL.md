@@ -76,13 +76,13 @@ const wallet = await privy.wallets().create({ chain_type: 'ethereum' });
 ## Install
 
 ```bash
-bun install --cwd ${CLAUDE_SKILL_DIR}
+bun install --cwd ${CLAUDE_SKILL_DIR}/../..
 ```
 
 ## Single Runtime Command
 
 ```bash
-cat payload.json | bun run --cwd ${CLAUDE_SKILL_DIR} prepare-sign-execute
+cat payload.json | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
 ```
 
 ## Input Contract (JSON stdin)
@@ -201,7 +201,7 @@ The script enforces:
 ## Example: Dry-Run Deposit
 
 ```bash
-cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR} prepare-sign-execute
+cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
 {
   "operation": "deposit",
   "deposit": { "asset": "USDC", "amount": "1", "vaultId": "124" },
@@ -219,7 +219,7 @@ If `deposit.vaultId` is omitted, the skill auto-discovers the top vault via `yie
 ## Example: Live Deposit
 
 ```bash
-cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR} prepare-sign-execute
+cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
 {
   "operation": "deposit",
   "deposit": { "asset": "USDC", "amount": "1", "vaultId": "124" },
