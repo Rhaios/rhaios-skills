@@ -10,18 +10,17 @@ Agent skills for interacting with the [Rhaios](https://rhaios.com) DeFi yield AP
 
 ## Install
 
-### Claude Code
+### Claude Code (Plugin)
 
-Symlink into your personal skills directory:
-
-```bash
-ln -s /path/to/rhaios-skills/rhaios-staging ~/.claude/skills/rhaios-staging
+```
+/plugin marketplace add Rhaios/rhaios-skills
+/plugin install rhaios-skills
 ```
 
-Or install as a plugin:
+Or symlink into your personal skills directory:
 
 ```bash
-/plugin add rhaios/rhaios-skills
+ln -s /path/to/rhaios-skills/skills/rhaios-staging ~/.claude/skills/rhaios-staging
 ```
 
 ### OpenClaw
