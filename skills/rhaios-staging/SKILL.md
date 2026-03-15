@@ -51,9 +51,9 @@ Before first use, install dependencies from the repo root:
 
 ```bash
 # Pick your package manager:
-npm install --prefix ${CLAUDE_SKILL_DIR}/../..
-# or: bun install --cwd ${CLAUDE_SKILL_DIR}/../..
-# or: pnpm install --dir ${CLAUDE_SKILL_DIR}/../..
+npm install --prefix ${CLAUDE_SKILL_DIR}
+# or: bun install --cwd ${CLAUDE_SKILL_DIR}
+# or: pnpm install --dir ${CLAUDE_SKILL_DIR}
 ```
 
 If you see `Cannot find module` errors, dependencies are not installed. Run the install command above.
@@ -105,10 +105,10 @@ const wallet = await privy.wallets().create({ chain_type: 'ethereum' });
 
 ```bash
 # Using bun (recommended — runs TypeScript natively):
-cat payload.json | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
+cat payload.json | bun run --cwd ${CLAUDE_SKILL_DIR} prepare-sign-execute
 
 # Using npx + tsx (if bun is not available):
-cat payload.json | npx --prefix ${CLAUDE_SKILL_DIR}/../.. tsx ${CLAUDE_SKILL_DIR}/../../scripts/prepare-sign-execute.ts
+cat payload.json | npx --prefix ${CLAUDE_SKILL_DIR} tsx ${CLAUDE_SKILL_DIR}/scripts/prepare-sign-execute.ts
 ```
 
 ## Input Contract (JSON stdin)
@@ -221,7 +221,7 @@ The script enforces:
 ## Example: Dry-Run Deposit
 
 ```bash
-cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
+cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR} prepare-sign-execute
 {
   "operation": "deposit",
   "deposit": { "asset": "USDC", "amount": "1", "vaultId": "VAULT_ID_FROM_DISCOVER" },
@@ -241,7 +241,7 @@ JSON
 ## Example: Live Deposit
 
 ```bash
-cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
+cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR} prepare-sign-execute
 {
   "operation": "deposit",
   "deposit": { "asset": "USDC", "amount": "1", "vaultId": "VAULT_ID_FROM_DISCOVER" },
