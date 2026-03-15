@@ -1,5 +1,0 @@
-{
-  "name": "rhaios-skills",
-  "description": "Agent skills for the Rhaios DeFi yield API — deposit, redeem, and rebalance via staging or production endpoints.",
-  "version": "1.0.0"
-}

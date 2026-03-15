@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "rhaios-skills",
+  "description": "Agent toolkit and skills for Rhaios — yield intelligence for DeFi agents.",
+  "owner": {
+    "name": "Rhaios",
+    "url": "https://github.com/Rhaios"
+  },
+  "plugins": [
+    {
+      "name": "rhaios-toolkit",
+      "description": "Yield intelligence skills for DeFi agents — discover vaults, prepare intents, sign, and execute on Ethereum and Base.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Rhaios",
+        "url": "https://github.com/Rhaios"
+      },
+      "homepage": "https://github.com/Rhaios/rhaios-skills",
+      "tags": ["defi", "yield", "agent", "eip-7702", "ethereum", "base"],
+      "source": "."
+    }
+  ]
+}
