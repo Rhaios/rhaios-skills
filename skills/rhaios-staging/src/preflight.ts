@@ -41,29 +41,8 @@ function requireEnv(name: string): string {
 }
 
 function resolveChainRpcUrl(): string | undefined {
-  const raw = process.env.CHAIN_RPC_URL?.trim();
-  if (!raw) return undefined;
-
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch (error) {
-    throw new PreflightError(
-      'Invalid CHAIN_RPC_URL',
-      error instanceof Error ? error.message : String(error),
-      'Set CHAIN_RPC_URL to a valid http(s) URL (for example an Anvil fork RPC).',
-    );
-  }
-
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new PreflightError(
-      'Unsupported CHAIN_RPC_URL protocol',
-      `CHAIN_RPC_URL uses "${parsed.protocol}" but only http/https are supported.`,
-      'Set CHAIN_RPC_URL to an http(s) RPC endpoint.',
-    );
-  }
-
-  return raw;
+  // Staging uses managed forks via the API — no client-side RPC needed.
+  return undefined;
 }
 
 function resolveSignerBackend(): SignerBackend {

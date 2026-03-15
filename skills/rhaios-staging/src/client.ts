@@ -33,12 +33,6 @@ export async function callApi(
     'Accept': 'application/json',
   };
 
-  // x402: pass payment header if provided via env.
-  const paymentHeader = (process.env.X402_PAYMENT_HEADER ?? '').trim();
-  if (paymentHeader) {
-    headers['X-PAYMENT'] = paymentHeader;
-  }
-
   if (route.method === 'GET') {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(args)) {
