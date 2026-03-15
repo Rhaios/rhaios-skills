@@ -8,9 +8,38 @@ license: MIT
 compatibility: Requires Node.js 22+ or Bun 1.0+
 metadata:
   author: rhaios
-  version: "0.1.0"
+  version: "0.1.2"
   openclaw:
-    primaryEnv: RHAIOS_API_URL
+    primaryEnv: PRIVY_WALLET_ADDRESS
+    env:
+      - name: SIGNER_BACKEND
+        required: false
+        sensitive: false
+        description: "privy or private-key. Defaults to privy."
+      - name: SIGNER_PRIVATE_KEY
+        required: false
+        sensitive: true
+        description: "Required only when SIGNER_BACKEND=private-key. 0x-prefixed 32-byte hex."
+      - name: PRIVY_APP_ID
+        required: false
+        sensitive: true
+        description: "Provided by Privy skill. Required when SIGNER_BACKEND=privy."
+      - name: PRIVY_APP_SECRET
+        required: false
+        sensitive: true
+        description: "Provided by Privy skill. Required when SIGNER_BACKEND=privy."
+      - name: PRIVY_WALLET_ID
+        required: false
+        sensitive: false
+        description: "Required when SIGNER_BACKEND=privy. Must be ownerless."
+      - name: PRIVY_WALLET_ADDRESS
+        required: false
+        sensitive: false
+        description: "Required when SIGNER_BACKEND=privy. 0x-prefixed address."
+    crossSkillDeps:
+      - name: privy-agentic-wallets
+        required: false
+        description: "Provides PRIVY_APP_ID and PRIVY_APP_SECRET."
     install:
       - kind: node
         package: "@rhaios/toolkit"
@@ -46,21 +75,8 @@ If `SIGNER_BACKEND=privy`, `PRIVY_APP_ID` and `PRIVY_APP_SECRET` are master cred
 ## Required Environment (Client)
 
 ```bash
-# Optional override. Defaults to https://api.staging.rhaios.com
-# RHAIOS_API_URL=https://api.staging.rhaios.com
-
 # Optional. Defaults to privy. Use private-key for local key signing.
 # SIGNER_BACKEND=privy
-
-# Optional. Defaults to true for staging.
-RHAIOS_AUTO_WRAP_WETH=true
-
-# Optional. Custom RPC for client-side preflight validation (e.g. balance checks against a fork).
-# Server-side preflight uses ANVIL_FORKS_URL automatically — do NOT pass this to the API.
-CHAIN_RPC_URL=
-
-# Optional. Default: true. Set to false to disable fork-only relay mode.
-# RHAIOS_FORK_ONLY_MODE=true
 
 # Required only for SIGNER_BACKEND=privy
 # PRIVY_APP_ID and PRIVY_APP_SECRET are provided by the Privy skill —
@@ -73,11 +89,11 @@ SIGNER_PRIVATE_KEY=<0x-32-byte-private-key>
 ```
 
 Notes:
-- `RHAIOS_API_URL` defaults to `https://api.staging.rhaios.com`. Override only if targeting a different environment.
+- API URL is hardcoded to `https://api.staging.rhaios.com` and cannot be overridden.
+- Fork-only mode is always enabled — all transactions go through managed test RPCs.
 - If `SIGNER_BACKEND=privy`, `PRIVY_APP_ID` and `PRIVY_APP_SECRET` must already be set (provided by the Privy skill). Only `PRIVY_WALLET_ID` and `PRIVY_WALLET_ADDRESS` need to be set per-wallet.
 - If `SIGNER_BACKEND=privy`, `PRIVY_WALLET_ID` must resolve to an ownerless wallet (`owner_id = null`).
 - If `SIGNER_BACKEND=private-key`, `agentAddress` (if provided) must match the private key address.
-- `CHAIN_RPC_URL` is optional. Used only for client-side preflight checks (e.g., balance validation against a fork). Server-side preflight automatically uses `ANVIL_FORKS_URL` with auth.
 
 ### Ownerless Wallet Creation
 
@@ -154,12 +170,6 @@ Operation-specific fields:
 6. `Post-check`
 - Calls `GET /v1/yield/status` for quick position/value verification.
 
-7. `Auto-wrap` (WETH deposits)
-- For `deposit.asset=WETH`, the script can auto-wrap native ETH into the exact ERC-4626 vault asset token (`vault.asset()`), then re-run `POST /v1/yield/prepare`.
-- Enabled by default on staging.
-- Override with `RHAIOS_AUTO_WRAP_WETH=true|false`.
-- For test RPC runs, keep auto-wrap disabled.
-
 ## Wallet Funding (Test RPC)
 
 Staging runs managed test RPCs — chain forks that mirror mainnet state. Agents can mint test balances without spending real tokens.
@@ -214,7 +224,7 @@ The script enforces:
 cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
 {
   "operation": "deposit",
-  "deposit": { "asset": "USDC", "amount": "1", "vaultId": "124" },
+  "deposit": { "asset": "USDC", "amount": "1", "vaultId": "VAULT_ID_FROM_DISCOVER" },
   "controls": {
     "dryRun": true,
     "strictMode": true,

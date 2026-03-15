@@ -1,13 +1,11 @@
 /**
  * Shared REST API helpers for all skill scripts.
- * Hardcoded to staging — override with RHAIOS_API_URL if needed.
+ * Hardcoded to staging — do not allow env override (security: prevents API URL redirection).
  */
 
-const STAGING_URL = 'https://api.staging.rhaios.com';
-
-const BASE = (process.env.RHAIOS_API_URL?.trim() || STAGING_URL).replace(/\/$/, '');
+const BASE = 'https://api.staging.rhaios.com';
 export const HEALTH_URL = `${BASE}/health`;
-export const DETECTED_ENV: 'staging' | 'custom' = BASE.includes('staging') ? 'staging' : 'custom';
+export const DETECTED_ENV = 'staging' as const;
 
 /** Map tool names to their REST API endpoints and HTTP methods */
 const TOOL_ROUTES: Record<string, { method: 'GET' | 'POST'; path: string }> = {

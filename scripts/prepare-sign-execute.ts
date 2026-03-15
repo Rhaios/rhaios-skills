@@ -1,20 +1,14 @@
 import { PrivyClient } from '@privy-io/node';
-import { createViemAccount } from '@privy-io/node/viem';
 import {
   createPublicClient,
-  createWalletClient,
   formatGwei,
-  formatUnits,
   http,
   keccak256,
-  parseAbi,
   parseGwei,
-  parseUnits,
   type Address,
   type Hex,
 } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { callApi, DETECTED_ENV } from '../src/client.ts';
+import { callApi } from '../src/client.ts';
 import { runPreparePreflight } from '../src/preflight.ts';
 import { createSigner, getPrepareGasInfo, signPreparedPayload } from '../src/signing.ts';
 import { isRecord, type PrepareSignExecuteRequest, type ResolvedChain } from '../src/types.ts';
@@ -23,15 +17,6 @@ import { PreflightError } from '../src/types.ts';
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const HEX_RE = /^0x[0-9a-fA-F]*$/;
 const HEX32_RE = /^0x[a-fA-F0-9]{64}$/;
-const WETH_DEPOSIT_CALLDATA = '0xd0e30db0' as Hex;
-const ERC4626_ASSET_ABI = parseAbi([
-  'function asset() view returns (address)',
-]);
-const ERC20_BALANCE_ABI = parseAbi([
-  'function balanceOf(address account) view returns (uint256)',
-  'function decimals() view returns (uint8)',
-]);
-
 type StageStatus = 'PASS' | 'WARN' | 'FAIL';
 
 interface SetupPayload {
@@ -210,67 +195,6 @@ async function signAndBroadcastPrivyTransactionViaCustomRpc(params: {
     throw new Error(`Custom RPC eth_sendRawTransaction returned invalid hash: ${String(txHash)}`);
   }
   return txHash as Hex;
-}
-
-async function sendPrivyWrapTransaction(params: {
-  appId: string;
-  appSecret: string;
-  walletId: string;
-  walletAddress: Address;
-  chain: ResolvedChain['chain'];
-  chainId: number;
-  chainRpcUrl?: string;
-  wethTokenAddress: Address;
-  amount: bigint;
-}): Promise<Hex> {
-  const {
-    appId,
-    appSecret,
-    walletId,
-    walletAddress,
-    chain,
-    chainId,
-    chainRpcUrl,
-    wethTokenAddress,
-    amount,
-  } = params;
-  const client = new PrivyClient({ appId, appSecret });
-
-  if (chainRpcUrl) {
-    const account = createViemAccount(client, {
-      walletId,
-      address: walletAddress,
-    });
-    const walletClient = createWalletClient({
-      account,
-      chain,
-      transport: rpcTransport(chainRpcUrl),
-    });
-    return walletClient.sendTransaction({
-      chain,
-      to: wethTokenAddress,
-      data: WETH_DEPOSIT_CALLDATA,
-      value: amount,
-    });
-  }
-
-  const response = await client.wallets().ethereum().sendTransaction(walletId, {
-    caip2: `eip155:${chainId}`,
-    params: {
-      transaction: {
-        from: walletAddress,
-        to: wethTokenAddress,
-        data: WETH_DEPOSIT_CALLDATA,
-        value: toRpcQuantity(amount),
-        chain_id: chainId,
-      },
-    },
-  });
-
-  if (!response.hash || typeof response.hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(response.hash)) {
-    throw new Error(`Privy wrap transaction returned invalid hash: ${JSON.stringify(response)}`);
-  }
-  return response.hash as Hex;
 }
 
 function failStage(stage: string, what: string, why: string, fix: string): never {
@@ -577,215 +501,11 @@ function extractStrategyVaultAddress(preparePayload: Record<string, unknown>): A
   return vault as Address;
 }
 
-function isAutoWrapEnabled(): boolean {
-  const override = process.env.RHAIOS_AUTO_WRAP_WETH?.trim().toLowerCase();
-  if (override === 'true') return true;
-  if (override === 'false') return false;
-  // Default: enabled for staging, disabled otherwise
-  return DETECTED_ENV === 'staging';
-}
-
-/** Fork-only relay mode. Default: true (staging uses managed forks). */
+/** Fork-only relay mode. Hardcoded true for staging — cannot be disabled. */
 function isForkOnlyModeEnabled(): boolean {
-  const override = process.env.RHAIOS_FORK_ONLY_MODE?.trim().toLowerCase();
-  if (override === 'false') return false;
   return true;
 }
 
-async function maybeAutoWrapForWethDeposit(params: {
-  input: PrepareSignExecuteRequest;
-  preflight: Awaited<ReturnType<typeof runPreparePreflight>>;
-  preparePayload: Record<string, unknown>;
-  publicClient: ReturnType<typeof createPublicClient>;
-}): Promise<boolean> {
-  const { input, preflight, preparePayload, publicClient } = params;
-  if (input.operation !== 'deposit') return false;
-  if (!input.deposit) return false;
-  if (input.deposit.asset.trim().toUpperCase() !== 'WETH') return false;
-  if (!isAutoWrapEnabled()) return false;
-  if (isForkOnlyModeEnabled()) {
-    failStage(
-      'Wrap',
-      'Auto-wrap is disabled in fork-only mode',
-      'RHAIOS_AUTO_WRAP_WETH=true requires direct wallet broadcast, which is disabled in fork-only mode.',
-      'Set RHAIOS_AUTO_WRAP_WETH=false and fund WETH on the managed fork before retrying.',
-    );
-  }
-
-  const vaultAddress = extractStrategyVaultAddress(preparePayload);
-  if (!vaultAddress) {
-    logStage('Wrap', 'WARN', [
-      'Could not resolve strategy.vault from yield_prepare response.',
-      'Skipping auto-wrap check for WETH deposit.',
-    ]);
-    return false;
-  }
-
-  let vaultAsset: Address;
-  try {
-    const asset = await publicClient.readContract({
-      address: vaultAddress,
-      abi: ERC4626_ASSET_ABI,
-      functionName: 'asset',
-    });
-    if (typeof asset !== 'string' || !ADDRESS_RE.test(asset)) {
-      throw new Error(`vault.asset() returned invalid address: ${String(asset)}`);
-    }
-    vaultAsset = asset as Address;
-  } catch (error) {
-    failStage(
-      'Wrap',
-      'Failed to resolve vault asset token',
-      error instanceof Error ? error.message : String(error),
-      'Retry later or verify the selected vault contract is ERC-4626 compliant.',
-    );
-  }
-
-  let tokenDecimals: number;
-  let tokenBalance: bigint;
-  let nativeBalance: bigint;
-  try {
-    const [decimals, balance, native] = await Promise.all([
-      publicClient.readContract({
-        address: vaultAsset,
-        abi: ERC20_BALANCE_ABI,
-        functionName: 'decimals',
-      }),
-      publicClient.readContract({
-        address: vaultAsset,
-        abi: ERC20_BALANCE_ABI,
-        functionName: 'balanceOf',
-        args: [preflight.walletAddress],
-      }),
-      publicClient.getBalance({ address: preflight.walletAddress }),
-    ]);
-    tokenDecimals = Number(decimals);
-    tokenBalance = balance;
-    nativeBalance = native;
-  } catch (error) {
-    failStage(
-      'Wrap',
-      'Failed to read vault asset balances',
-      error instanceof Error ? error.message : String(error),
-      'Verify RPC access and token contract state, then retry.',
-    );
-  }
-
-  let requiredAmount: bigint;
-  try {
-    requiredAmount = parseUnits(input.deposit.amount, tokenDecimals);
-  } catch (error) {
-    failStage(
-      'Wrap',
-      'Invalid deposit amount precision for vault asset',
-      error instanceof Error ? error.message : String(error),
-      'Adjust deposit.amount to match token decimals and retry.',
-    );
-  }
-
-  if (tokenBalance >= requiredAmount) return false;
-  const deficit = requiredAmount - tokenBalance;
-
-  if (preflight.controls.dryRun) {
-    logStage('Wrap', 'WARN', [
-      'Dry run: wallet lacks required balance on selected vault asset token.',
-      `vault: ${vaultAddress}`,
-      `assetToken: ${vaultAsset}`,
-      `required: ${formatUnits(requiredAmount, tokenDecimals)} WETH`,
-      `current: ${formatUnits(tokenBalance, tokenDecimals)} WETH`,
-      `deficitToWrap: ${formatUnits(deficit, tokenDecimals)} WETH`,
-    ]);
-    return false;
-  }
-
-  if (nativeBalance < deficit) {
-    failStage(
-      'Wrap',
-      'Insufficient native ETH to auto-wrap WETH',
-      `Need ${formatUnits(deficit, 18)} ETH, but wallet has ${formatUnits(nativeBalance, 18)} ETH.`,
-      'Fund wallet with more ETH or lower deposit.amount.',
-    );
-  }
-
-  let txHash: Hex;
-  try {
-    if (preflight.signerBackend === 'privy') {
-      if (!preflight.privy) {
-        throw new Error('Missing Privy config in preflight context.');
-      }
-      txHash = await sendPrivyWrapTransaction({
-        appId: preflight.privy.appId,
-        appSecret: preflight.privy.appSecret,
-        walletId: preflight.privy.walletId,
-        walletAddress: preflight.walletAddress,
-        chain: preflight.chain.chain,
-        chainId: preflight.chain.chainId,
-        ...(preflight.chainRpcUrl ? { chainRpcUrl: preflight.chainRpcUrl } : {}),
-        wethTokenAddress: vaultAsset,
-        amount: deficit,
-      });
-    } else {
-      if (!preflight.privateKey) {
-        throw new Error('Missing SIGNER_PRIVATE_KEY in preflight context.');
-      }
-      const walletClient = createWalletClient({
-        account: privateKeyToAccount(preflight.privateKey),
-        chain: preflight.chain.chain,
-        transport: rpcTransport(preflight.chainRpcUrl),
-      });
-      txHash = await walletClient.sendTransaction({
-        to: vaultAsset,
-        data: WETH_DEPOSIT_CALLDATA,
-        value: deficit,
-      });
-    }
-  } catch (error) {
-    failStage(
-      'Wrap',
-      'Failed to submit auto-wrap transaction',
-      error instanceof Error ? error.message : String(error),
-      'Wrap ETH to the vault asset token manually, then retry.',
-    );
-  }
-
-  const wrapReceipt = await publicClient.waitForTransactionReceipt({
-    hash: txHash,
-    confirmations: 2,
-  });
-
-  if (wrapReceipt.status !== 'success') {
-    failStage(
-      'Wrap',
-      'Auto-wrap transaction reverted',
-      `txHash=${txHash}`,
-      'Wrap ETH manually to the required asset token and retry.',
-    );
-  }
-
-  const postWrapBalance = await publicClient.readContract({
-    address: vaultAsset,
-    abi: ERC20_BALANCE_ABI,
-    functionName: 'balanceOf',
-    args: [preflight.walletAddress],
-  });
-
-  if (postWrapBalance < requiredAmount) {
-    failStage(
-      'Wrap',
-      'Auto-wrap completed but balance is still insufficient',
-      `postWrapBalance=${formatUnits(postWrapBalance, tokenDecimals)} < required=${formatUnits(requiredAmount, tokenDecimals)}.`,
-      'Increase wallet ETH and retry, or lower deposit.amount.',
-    );
-  }
-
-  logStage('Wrap', 'PASS', [
-    `vault: ${vaultAddress}`,
-    `assetToken: ${vaultAsset}`,
-    `wrapped: ${formatUnits(deficit, tokenDecimals)} WETH`,
-    `txHash: ${txHash}`,
-  ]);
-  return true;
-}
 
 async function main(): Promise<void> {
   let input: PrepareSignExecuteRequest;
@@ -863,39 +583,6 @@ async function main(): Promise<void> {
     chain: preflight.chain.chain,
     transport: rpcTransport(preflight.chainRpcUrl),
   });
-
-  const wrapped = await maybeAutoWrapForWethDeposit({
-    input: input!,
-    preflight,
-    preparePayload,
-    publicClient,
-  });
-
-  if (wrapped) {
-    const { payload: wrappedPreparePayload, isError: wrappedPrepareIsError } = await callApi(
-      'yield_prepare',
-      prepareArgs,
-    );
-
-    if (wrappedPrepareIsError || wrappedPreparePayload.error) {
-      failStage(
-        'Prepare',
-        'yield_prepare failed after auto-wrap',
-        String(wrappedPreparePayload.error ?? wrappedPreparePayload.detail ?? JSON.stringify(wrappedPreparePayload)),
-        'Retry the flow or inspect API logs.',
-      );
-    }
-
-    enforceGasCapIfConfigured(preflight.controls.maxGasGwei, wrappedPreparePayload);
-    preparePayload = wrappedPreparePayload;
-    needsSetup = wrappedPreparePayload.needsSetup === true;
-    logStage('Prepare', 'PASS', [
-      'phase: post-wrap re-prepare',
-      `operation: ${input!.operation}`,
-      `needsSetup: ${String(needsSetup)}`,
-      `merkleRoot: ${needsSetup ? 'n/a (setup required)' : extractIntentIdentity(preparePayload).intentId}`,
-    ]);
-  }
 
   const signer = createSigner({
     signerBackend: preflight.signerBackend,
