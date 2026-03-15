@@ -5,18 +5,30 @@ description: >
   Discover -> prepare -> setup-if-needed -> sign -> execute flow with pluggable signer backend.
   Triggers on requests involving DeFi yield, vault deposits, redeems, rebalancing, or Rhaios API.
 license: MIT
-compatibility: Requires Bun 1.0+
+compatibility: Requires Node.js 22+ or Bun 1.0+
 metadata:
   author: rhaios
-  version: "1.0.0"
+  version: "0.1.0"
   openclaw:
-    requires:
-      bins:
-        - bun
     primaryEnv: RHAIOS_API_URL
     install:
       - kind: node
-        package: "@privy-io/node"
+        package: "@rhaios/toolkit"
+---
+
+## First-Time Setup
+
+Before first use, install dependencies from the repo root:
+
+```bash
+# Pick your package manager:
+npm install --prefix ${CLAUDE_SKILL_DIR}/../..
+# or: bun install --cwd ${CLAUDE_SKILL_DIR}/../..
+# or: pnpm install --dir ${CLAUDE_SKILL_DIR}/../..
+```
+
+If you see `Cannot find module` errors, dependencies are not installed. Run the install command above.
+
 ---
 
 This skill targets the **staging** environment at `https://api.staging.rhaios.com`. It provides one command surface (`prepare-sign-execute`) for end-to-end execution.
@@ -73,16 +85,14 @@ Notes:
 const wallet = await privy.wallets().create({ chain_type: 'ethereum' });
 ```
 
-## Install
-
-```bash
-bun install --cwd ${CLAUDE_SKILL_DIR}/../..
-```
-
 ## Single Runtime Command
 
 ```bash
+# Using bun (recommended — runs TypeScript natively):
 cat payload.json | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
+
+# Using npx + tsx (if bun is not available):
+cat payload.json | npx --prefix ${CLAUDE_SKILL_DIR}/../.. tsx ${CLAUDE_SKILL_DIR}/../../scripts/prepare-sign-execute.ts
 ```
 
 ## Input Contract (JSON stdin)

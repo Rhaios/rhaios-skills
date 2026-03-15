@@ -20,10 +20,12 @@ clawhub install rhaios-staging
 /plugin marketplace add Rhaios/rhaios-skills
 ```
 
-### npm / bun
+### npm / bun / pnpm
 
 ```bash
-bun add @rhaios/toolkit
+npm install @rhaios/toolkit
+# or: bun add @rhaios/toolkit
+# or: pnpm add @rhaios/toolkit
 ```
 
 Or install from source:
@@ -31,7 +33,7 @@ Or install from source:
 ```bash
 git clone https://github.com/Rhaios/rhaios-skills.git
 cd rhaios-skills
-bun install
+npm install  # or bun install, or pnpm install
 ```
 
 For Claude Code, symlink the skill:
