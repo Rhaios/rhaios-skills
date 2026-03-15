@@ -1,6 +1,8 @@
-# Rhaios Skills
+# @rhaios/toolkit
 
-Agent skills for [Rhaios](https://rhaios.com) — yield intelligence for DeFi. Compatible with [Claude Code](https://code.claude.com), [OpenClaw](https://openclaw.ai), and any tool implementing the [Agent Skills](https://agentskills.io) standard.
+Agent toolkit and skills for [Rhaios](https://rhaios.com) — yield intelligence for DeFi. Compatible with [Claude Code](https://code.claude.com), [OpenClaw](https://openclaw.ai), and any tool implementing the [Agent Skills](https://agentskills.io) standard.
+
+> **Note:** This toolkit currently depends on [Privy](https://privy.io/) for wallet signing. If you use `SIGNER_BACKEND=private-key`, Privy is not called at runtime but is still a package dependency. We plan to make the Privy dependency fully optional in a future release.
 
 ## Install
 
@@ -18,18 +20,24 @@ clawhub install rhaios-staging
 /plugin marketplace add Rhaios/rhaios-skills
 ```
 
-### Manual
+### npm / bun
+
+```bash
+bun add @rhaios/toolkit
+```
+
+Or install from source:
 
 ```bash
 git clone https://github.com/Rhaios/rhaios-skills.git
-cd rhaios-skills/skills/rhaios-staging
+cd rhaios-skills
 bun install
 ```
 
-Then symlink for Claude Code:
+For Claude Code, symlink the skill:
 
 ```bash
-ln -s $(pwd) ~/.claude/skills/rhaios-staging
+ln -s $(pwd)/skills/rhaios-staging ~/.claude/skills/rhaios-staging
 ```
 
 ## Quickstart
@@ -41,7 +49,7 @@ Once installed, ask your agent:
 Or run the skill script directly:
 
 ```bash
-cat <<'JSON' | bun run --cwd skills/rhaios-staging prepare-sign-execute
+cat <<'JSON' | bun run prepare-sign-execute
 {
   "operation": "deposit",
   "deposit": { "asset": "USDC", "amount": "1", "vaultId": "124" },
