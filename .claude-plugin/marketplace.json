@@ -1,10 +1,12 @@
 {
-  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "rhaios-skills",
-  "description": "Agent toolkit and skills for Rhaios — yield intelligence for DeFi agents.",
   "owner": {
     "name": "Rhaios",
     "url": "https://github.com/Rhaios"
+  },
+  "metadata": {
+    "description": "Agent toolkit and skills for Rhaios — yield intelligence for DeFi agents.",
+    "version": "0.1.0"
   },
   "plugins": [
     {
@@ -17,7 +19,7 @@
       },
       "homepage": "https://github.com/Rhaios/rhaios-skills",
       "tags": ["defi", "yield", "agent", "eip-7702", "ethereum", "base"],
-      "source": "."
+      "source": "./plugins/rhaios-toolkit"
     }
   ]
 }

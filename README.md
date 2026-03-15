@@ -78,6 +78,14 @@ The **rhaios-staging** skill gives your agent a complete yield workflow:
 - [API reference](https://docs.rhaios.com/tools/yield_discover)
 - [llms.txt](https://staging.rhaios.com/llms.txt) — machine-readable summary
 
+## Contributing
+
+SKILL.md exists in two locations to support both Claude Code and OpenClaw:
+- `skills/rhaios-staging/SKILL.md` — OpenClaw / clawhub
+- `plugins/rhaios-toolkit/skills/rhaios-staging/SKILL.md` — Claude Code marketplace
+
+**Always keep both files identical.** When editing SKILL.md, copy the changes to both locations.
+
 ## License
 
 MIT
