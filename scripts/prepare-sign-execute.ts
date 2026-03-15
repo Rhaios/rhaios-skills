@@ -824,24 +824,15 @@ async function main(): Promise<void> {
     ...preflight.warnings.map((warning) => `warning: ${warning}`),
   ]);
 
-  // Auto-discover vault if deposit.vaultId is not provided
+  // Require vaultId for deposits — agents should call yield_discover first,
+  // present results to the user, and let them choose a vault.
   if (input!.operation === 'deposit' && !input!.deposit?.vaultId) {
-    logStage('Discover', 'INFO', ['No vaultId specified for deposit, running auto-discovery...']);
-    const { payload: discoverPayload, isError: discoverIsError } = await callApi('yield_discover', {
-      asset: input!.deposit!.asset,
-      chain: preflight.chain.slug,
-    });
-    if (discoverIsError || !Array.isArray(discoverPayload.vaults) || discoverPayload.vaults.length === 0) {
-      failStage(
-        'Discover',
-        'No eligible vaults found',
-        String(discoverPayload.error ?? JSON.stringify(discoverPayload)),
-        'Check asset/chain combination or try a different asset.',
-      );
-    }
-    const topVault = (discoverPayload.vaults as Array<{ vaultId: string }>)[0]!;
-    input!.deposit!.vaultId = topVault.vaultId;
-    logStage('Discover', 'PASS', [`auto-selected vaultId: ${topVault.vaultId}`]);
+    failStage(
+      'Prepare',
+      'Missing deposit.vaultId',
+      'deposit.vaultId is required. Call yield_discover first to browse vaults, present results to the user, and pass their chosen vaultId.',
+      'Run yield_discover, let the user pick a vault, then include deposit.vaultId in the request.',
+    );
   }
 
   const prepareArgs = buildPrepareArgs(input!, preflight.walletAddress, preflight.chain.slug);

@@ -119,7 +119,7 @@ cat payload.json | npx --prefix ${CLAUDE_SKILL_DIR}/../.. tsx ${CLAUDE_SKILL_DIR
 ```
 
 Operation-specific fields:
-- `deposit`: requires `deposit.asset`, `deposit.amount`, `deposit.vaultId` (from yield_discover; auto-discovered if omitted)
+- `deposit`: requires `deposit.asset`, `deposit.amount`, `deposit.vaultId` (from yield_discover — present results to the user and let them choose)
 - `redeem`: requires `redeem.vaultId` and exactly one of `redeem.percentage` or `redeem.shares`
 - `rebalance`: requires `rebalance.vaultId`, `rebalance.asset`, and exactly one of `rebalance.percentage` or `rebalance.shares`
 
@@ -224,9 +224,9 @@ cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
 JSON
 ```
 
-If `deposit.vaultId` is omitted, the skill auto-discovers the top vault via `yield_discover`.
+**Important:** Always call `yield_discover` first, present the ranked vaults to the user, and let them choose. Then pass their chosen `vaultId` to this script. Do not auto-select vaults on behalf of the user.
 
-**Vault capacity:** Some vaults may be at capacity (`maxDeposit=0`). If `yield_prepare` returns `vault_at_capacity`, pick a different vault from `yield_discover` results. The auto-discovery path handles this automatically by selecting the top-ranked available vault.
+**Vault capacity:** Some vaults may be at capacity (`maxDeposit=0`). If `yield_prepare` returns `vault_at_capacity`, inform the user and let them pick a different vault from the discover results.
 
 ## Example: Live Deposit
 
