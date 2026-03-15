@@ -52,7 +52,7 @@ Or run the skill script directly:
 cat <<'JSON' | bun run prepare-sign-execute
 {
   "operation": "deposit",
-  "deposit": { "asset": "USDC", "amount": "1", "vaultId": "124" },
+  "deposit": { "asset": "USDC", "amount": "1", "vaultId": "VAULT_ID_FROM_DISCOVER" },
   "controls": { "dryRun": true, "strictMode": true, "requireConfirm": false }
 }
 JSON

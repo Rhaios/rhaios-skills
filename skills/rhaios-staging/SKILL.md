@@ -95,7 +95,7 @@ cat payload.json | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
   "deposit": {
     "asset": "USDC",
     "amount": "1",
-    "vaultId": "124"
+    "vaultId": "VAULT_ID_FROM_DISCOVER"
   },
   "controls": {
     "dryRun": false,
@@ -216,13 +216,15 @@ JSON
 
 If `deposit.vaultId` is omitted, the skill auto-discovers the top vault via `yield_discover`.
 
+**Vault capacity:** Some vaults may be at capacity (`maxDeposit=0`). If `yield_prepare` returns `vault_at_capacity`, pick a different vault from `yield_discover` results. The auto-discovery path handles this automatically by selecting the top-ranked available vault.
+
 ## Example: Live Deposit
 
 ```bash
 cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR}/../.. prepare-sign-execute
 {
   "operation": "deposit",
-  "deposit": { "asset": "USDC", "amount": "1", "vaultId": "124" },
+  "deposit": { "asset": "USDC", "amount": "1", "vaultId": "VAULT_ID_FROM_DISCOVER" },
   "controls": {
     "dryRun": false,
     "strictMode": true,

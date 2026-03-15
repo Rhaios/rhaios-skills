@@ -36,8 +36,7 @@ export async function callApi(
   };
 
   // x402: pass payment header if provided via env.
-  // On staging, X402_PAYMENT_HEADER can be set to any non-empty value
-  // (e.g. a pre-signed payment from the agent wallet, or a testing bypass token).
+  const paymentHeader = (process.env.X402_PAYMENT_HEADER ?? '').trim();
   if (paymentHeader) {
     headers['X-PAYMENT'] = paymentHeader;
   }
