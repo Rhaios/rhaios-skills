@@ -139,6 +139,8 @@ Operation-specific fields:
 - `redeem`: requires `redeem.vaultId` and exactly one of `redeem.percentage` or `redeem.shares`
 - `rebalance`: requires `rebalance.vaultId`, `rebalance.asset`, and exactly one of `rebalance.percentage` or `rebalance.shares`
 
+**Note:** The script uses a **nested** input format (`deposit: { asset, amount, vaultId }`), which differs from the REST API's **flat** format (`POST /v1/yield/prepare` takes `asset`, `amount`, `vaultId` as top-level fields). The script maps between the two internally.
+
 ## Runtime Behavior
 
 1. `Preflight`
@@ -192,6 +194,8 @@ Then fund your wallet:
     "usdcAmount": "10000000"
   }'
 ```
+
+Both amounts are in **base units**: `ethWei` is in wei (above = 0.02 ETH), `usdcAmount` is in 6-decimal base units (above = 10 USDC). Max per call: 0.02 ETH / 50 USDC.
 
 
 ## Safety Model
