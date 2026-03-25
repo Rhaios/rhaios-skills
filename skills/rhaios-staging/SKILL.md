@@ -129,7 +129,10 @@ cat payload.json | npx --prefix ${CLAUDE_SKILL_DIR} tsx ${CLAUDE_SKILL_DIR}/scri
     "requireConfirm": true,
     "confirm": "yes",
     "maxGasGwei": "1",
-    "maxAmount": "1000"
+    "maxAmount": "1000",
+    "maxSlippageBps": 50,
+    "maxPrepareAgeSec": 300,
+    "maxPpsDriftBps": 100
   }
 }
 ```
@@ -222,6 +225,18 @@ The script enforces:
 - sender/signer match
 - intent ID vs merkle root consistency
 
+5. Slippage protection
+- `maxSlippageBps` (default 50 = 0.5%) — passed to yield_prepare so the server can bound calldata. Rejects if share price deviates beyond the specified threshold.
+- `maxPrepareAgeSec` (default 300 = 5 min) — client-side staleness guard that rejects execute if the prepare result is too old, preventing stale pricing data from being used.
+- Intent expiry validation — checks the EIP-712 `signing.message.expiry` timestamp before signing and rejects expired intents.
+- Each prepare→execute pair is bound by `intentEnvelope.merkleRoot` (the deterministic intent ID). The merkleRoot is validated at prepare time, passed through signing, and submitted to execute as `intentId`.
+
+6. PPS (price-per-share) validation
+- `maxPpsDriftBps` (default 100 = 1%) — guards against depositing into a vault mid-depeg.
+- **Pre-prepare baseline:** Fetches the vault's current PPS via `yield_discover` before calling `yield_prepare`. If discover doesn't return PPS, falls back to the prepare response's `slippage.pricePerShare`.
+- **Pre-execute recheck:** Re-fetches PPS via `yield_discover` before calling `yield_execute`. Aborts if PPS drifted more than `maxPpsDriftBps` from baseline.
+- Both checkpoints are logged for audit trail (`PPS-Baseline`, `PPS-PreExecute` stages).
+
 ## Example: Dry-Run Deposit
 
 ```bash
@@ -255,7 +270,9 @@ cat <<'JSON' | bun run --cwd ${CLAUDE_SKILL_DIR} prepare-sign-execute
     "requireConfirm": true,
     "confirm": "yes",
     "maxGasGwei": "1",
-    "maxAmount": "1000"
+    "maxAmount": "1000",
+    "maxSlippageBps": 50,
+    "maxPrepareAgeSec": 300
   }
 }
 JSON

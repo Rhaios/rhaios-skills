@@ -12,6 +12,14 @@ export interface RunControls {
   confirm?: string;
   maxGasGwei?: string;
   maxAmount?: string;
+  /** Max allowed slippage in basis points (1 bps = 0.01%). Rejects if share price
+   *  deviates more than this between prepare and execute. Default: 50 (0.5%). */
+  maxSlippageBps?: number;
+  /** Max seconds a prepare result may be held before execute. Default: 300 (5 min). */
+  maxPrepareAgeSec?: number;
+  /** Max allowed PPS (price-per-share) drift in basis points between pre-prepare baseline
+   *  and pre-execute recheck. Aborts if vault PPS moved more than this. Default: 100 (1%). */
+  maxPpsDriftBps?: number;
 }
 
 export interface RequiredRunControls {
@@ -21,6 +29,9 @@ export interface RequiredRunControls {
   confirm: string;
   maxGasGwei?: string;
   maxAmount?: string;
+  maxSlippageBps: number;
+  maxPrepareAgeSec: number;
+  maxPpsDriftBps: number;
 }
 
 export interface DepositInput {
@@ -82,6 +93,9 @@ export function normalizeControls(controls?: RunControls): RequiredRunControls {
     confirm: (controls?.confirm ?? '').toLowerCase(),
     maxGasGwei: controls?.maxGasGwei,
     maxAmount: controls?.maxAmount,
+    maxSlippageBps: controls?.maxSlippageBps ?? 50,
+    maxPrepareAgeSec: controls?.maxPrepareAgeSec ?? 300,
+    maxPpsDriftBps: controls?.maxPpsDriftBps ?? 100,
   };
 }
 

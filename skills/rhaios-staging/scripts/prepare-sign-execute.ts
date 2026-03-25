@@ -11,7 +11,7 @@ import {
 import { callApi } from '../src/client.ts';
 import { runPreparePreflight } from '../src/preflight.ts';
 import { createSigner, getPrepareGasInfo, signPreparedPayload } from '../src/signing.ts';
-import { isRecord, type PrepareSignExecuteRequest, type ResolvedChain } from '../src/types.ts';
+import { isRecord, type PrepareSignExecuteRequest, type ResolvedChain, type ChainSlug } from '../src/types.ts';
 import { PreflightError } from '../src/types.ts';
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
@@ -266,7 +266,9 @@ function buildPrepareArgs(
   input: PrepareSignExecuteRequest,
   walletAddress: string,
   chain: string,
+  maxSlippageBps: number,
 ): Record<string, unknown> {
+  const slippage = maxSlippageBps > 0 ? { maxSlippageBps } : {};
   if (input.operation === 'deposit') {
     return {
       operation: 'deposit',
@@ -275,6 +277,7 @@ function buildPrepareArgs(
       asset: input.deposit!.asset,
       amount: input.deposit!.amount,
       vaultId: input.deposit!.vaultId,
+      ...slippage,
     };
   }
   if (input.operation === 'redeem') {
@@ -287,6 +290,7 @@ function buildPrepareArgs(
       agentAddress: walletAddress,
       vaultId: input.redeem!.vaultId,
       ...amountSelection,
+      ...slippage,
     };
   }
   const amountSelection = input.rebalance!.shares
@@ -299,6 +303,7 @@ function buildPrepareArgs(
     vaultId: input.rebalance!.vaultId,
     asset: input.rebalance!.asset,
     ...amountSelection,
+    ...slippage,
   };
 }
 
@@ -501,6 +506,104 @@ function extractStrategyVaultAddress(preparePayload: Record<string, unknown>): A
   return vault as Address;
 }
 
+/** Validate that the intent's EIP-712 signing expiry has not passed. */
+function validateIntentExpiry(preparePayload: Record<string, unknown>): void {
+  const envelope = preparePayload.intentEnvelope as Record<string, unknown> | undefined;
+  const signing = envelope?.signing as Record<string, unknown> | undefined;
+  const message = signing?.message as Record<string, unknown> | undefined;
+  if (!message) return; // No signing metadata — server may not include it; skip check.
+
+  const expiry = message.expiry;
+  if (typeof expiry === 'number' && expiry > 0) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (nowSec >= expiry) {
+      failStage(
+        'Sign',
+        'Intent expired',
+        `signing.message.expiry=${expiry} is in the past (now=${nowSec}).`,
+        'Re-run yield_prepare to get a fresh intent.',
+      );
+    }
+  }
+}
+
+/** Enforce max age between prepare and execute. */
+function enforcePrepareStaleness(
+  preparedAtMs: number,
+  maxPrepareAgeSec: number,
+): void {
+  const ageSec = (Date.now() - preparedAtMs) / 1000;
+  if (ageSec > maxPrepareAgeSec) {
+    failStage(
+      'Execute',
+      'Stale prepare result',
+      `Prepare is ${ageSec.toFixed(1)}s old, exceeding maxPrepareAgeSec=${maxPrepareAgeSec}.`,
+      'Re-run yield_prepare to get a fresh intent.',
+    );
+  }
+}
+
+/** Extract slippage metadata from prepare response for logging/validation. */
+function extractSlippageInfo(preparePayload: Record<string, unknown>): {
+  serverSlippageBps: number | null;
+  pricePerShare: string | null;
+} {
+  const slippage = isRecord(preparePayload.slippage) ? preparePayload.slippage : null;
+  return {
+    serverSlippageBps: typeof slippage?.maxSlippageBps === 'number' ? slippage.maxSlippageBps : null,
+    pricePerShare: typeof slippage?.pricePerShare === 'string' ? slippage.pricePerShare : null,
+  };
+}
+
+/** Extract vaultId from the input regardless of operation type. */
+function extractVaultId(input: PrepareSignExecuteRequest): string | null {
+  if (input.operation === 'deposit') return input.deposit?.vaultId ?? null;
+  if (input.operation === 'redeem') return input.redeem?.vaultId ?? null;
+  if (input.operation === 'rebalance') return input.rebalance?.vaultId ?? null;
+  return null;
+}
+
+/** Fetch the current price-per-share for a vault via yield_discover. Returns null if unavailable. */
+async function fetchVaultPps(vaultId: string, chain: ChainSlug): Promise<string | null> {
+  try {
+    const { payload, isError } = await callApi('yield_discover', {
+      chain,
+      vaultId,
+    });
+    if (isError || !payload) return null;
+
+    // yield_discover returns vaults array — find the matching vault
+    const vaults = Array.isArray(payload.vaults) ? payload.vaults : [];
+    for (const vault of vaults) {
+      if (!isRecord(vault)) continue;
+      if (vault.vaultId === vaultId || vault.id === vaultId) {
+        // PPS may be at vault.pricePerShare or vault.sharePrice
+        const pps = vault.pricePerShare ?? vault.sharePrice;
+        if (typeof pps === 'string' && pps.length > 0) return pps;
+        if (typeof pps === 'number') return String(pps);
+      }
+    }
+
+    // Fallback: check top-level response if discover returns a single vault
+    const topPps = payload.pricePerShare ?? payload.sharePrice;
+    if (typeof topPps === 'string' && topPps.length > 0) return topPps;
+    if (typeof topPps === 'number') return String(topPps);
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Compute PPS drift in basis points. Returns null if either value is unparseable. */
+function computePpsDriftBps(baseline: string, current: string): number | null {
+  const baseVal = Number(baseline);
+  const curVal = Number(current);
+  if (!Number.isFinite(baseVal) || !Number.isFinite(curVal) || baseVal === 0) return null;
+  const driftRatio = Math.abs(curVal - baseVal) / baseVal;
+  return Math.round(driftRatio * 10_000); // basis points
+}
+
 /** Fork-only relay mode. Hardcoded true for staging — cannot be disabled. */
 function isForkOnlyModeEnabled(): boolean {
   return true;
@@ -555,11 +658,24 @@ async function main(): Promise<void> {
     );
   }
 
-  const prepareArgs = buildPrepareArgs(input!, preflight.walletAddress, preflight.chain.slug);
+  // --- PPS checkpoint 1: pre-prepare baseline ---
+  const targetVaultId = extractVaultId(input!);
+  let baselinePps: string | null = null;
+  if (targetVaultId) {
+    baselinePps = await fetchVaultPps(targetVaultId, preflight.chain.slug);
+    logStage('PPS-Baseline', baselinePps ? 'PASS' : 'WARN', [
+      `vaultId: ${targetVaultId}`,
+      `pricePerShare: ${baselinePps ?? 'unavailable (discover did not return PPS)'}`,
+      `maxPpsDriftBps: ${preflight.controls.maxPpsDriftBps}`,
+    ]);
+  }
+
+  const prepareArgs = buildPrepareArgs(input!, preflight.walletAddress, preflight.chain.slug, preflight.controls.maxSlippageBps);
   const { payload: firstPreparePayload, isError: firstPrepareIsError } = await callApi(
 'yield_prepare',
     prepareArgs,
   );
+  let preparedAtMs = Date.now();
 
   if (firstPrepareIsError || firstPreparePayload.error) {
     failStage(
@@ -573,10 +689,24 @@ async function main(): Promise<void> {
   enforceGasCapIfConfigured(preflight.controls.maxGasGwei, firstPreparePayload);
   let preparePayload = firstPreparePayload;
   let needsSetup = preparePayload.needsSetup === true;
+  const slippageInfo = extractSlippageInfo(preparePayload);
+
+  // Use prepare-response PPS as baseline if discover didn't provide one
+  if (!baselinePps && slippageInfo.pricePerShare) {
+    baselinePps = slippageInfo.pricePerShare;
+    logStage('PPS-Baseline', 'WARN', [
+      'Using prepare-response PPS as baseline (discover did not provide PPS)',
+      `pricePerShare: ${baselinePps}`,
+    ]);
+  }
+
   logStage('Prepare', 'PASS', [
     `operation: ${input!.operation}`,
     `needsSetup: ${String(needsSetup)}`,
     `merkleRoot: ${needsSetup ? 'n/a (setup required)' : extractIntentIdentity(preparePayload).intentId}`,
+    `maxSlippageBps: ${preflight.controls.maxSlippageBps}`,
+    ...(slippageInfo.serverSlippageBps !== null ? [`serverSlippageBps: ${slippageInfo.serverSlippageBps}`] : []),
+    ...(slippageInfo.pricePerShare !== null ? [`pricePerShare: ${slippageInfo.pricePerShare}`] : []),
   ]);
 
   const publicClient = createPublicClient({
@@ -847,13 +977,22 @@ async function main(): Promise<void> {
 
     preparePayload = secondPreparePayload!;
     resolvedIntentId = secondIntent.intentId;
+    // Reset staleness clock after re-prepare
+    preparedAtMs = Date.now();
+    const reSlippageInfo = extractSlippageInfo(preparePayload);
     logStage('Prepare', 'PASS', [
       'phase: post-setup re-prepare',
       `operation: ${input!.operation}`,
       `needsSetup: false`,
       `merkleRoot: ${resolvedIntentId}`,
+      `maxSlippageBps: ${preflight.controls.maxSlippageBps}`,
+      ...(reSlippageInfo.serverSlippageBps !== null ? [`serverSlippageBps: ${reSlippageInfo.serverSlippageBps}`] : []),
+      ...(reSlippageInfo.pricePerShare !== null ? [`pricePerShare: ${reSlippageInfo.pricePerShare}`] : []),
     ]);
   }
+
+  // Guard: reject expired intents before signing
+  validateIntentExpiry(preparePayload);
 
   let signed;
   try {
@@ -884,6 +1023,36 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Guard: reject stale prepare results before executing
+  enforcePrepareStaleness(preparedAtMs, preflight.controls.maxPrepareAgeSec);
+
+  // --- PPS checkpoint 2: pre-execute recheck ---
+  if (baselinePps && targetVaultId) {
+    const preExecutePps = await fetchVaultPps(targetVaultId, preflight.chain.slug);
+    if (preExecutePps) {
+      const driftBps = computePpsDriftBps(baselinePps, preExecutePps);
+      logStage('PPS-PreExecute', 'PASS', [
+        `baselinePps: ${baselinePps}`,
+        `currentPps: ${preExecutePps}`,
+        `driftBps: ${driftBps !== null ? String(driftBps) : 'unknown'}`,
+        `maxPpsDriftBps: ${preflight.controls.maxPpsDriftBps}`,
+      ]);
+      if (driftBps !== null && driftBps > preflight.controls.maxPpsDriftBps) {
+        failStage(
+          'PPS-PreExecute',
+          'PPS drift exceeds threshold',
+          `Vault PPS moved ${driftBps} bps (baseline=${baselinePps}, current=${preExecutePps}), exceeding maxPpsDriftBps=${preflight.controls.maxPpsDriftBps}.`,
+          'Abort and re-evaluate. The vault may be experiencing a depeg. Raise controls.maxPpsDriftBps or wait for PPS to stabilize.',
+        );
+      }
+    } else {
+      logStage('PPS-PreExecute', 'WARN', [
+        'Could not fetch pre-execute PPS for drift check.',
+        `baselinePps: ${baselinePps}`,
+      ]);
+    }
+  }
+
   const { payload: executePayload, isError: executeIsError } = await callApi(
 'yield_execute',
     {
@@ -905,8 +1074,11 @@ async function main(): Promise<void> {
 
   const executeClassification = classifyExecuteResult(executePayload);
   const receipt = (executePayload.receipt ?? {}) as Record<string, unknown>;
+  const prepareAgeMs = Date.now() - preparedAtMs;
   logStage('Execute', 'PASS', [
     `classification: ${executeClassification.classification}`,
+    `intentId: ${String(resolvedIntentId ?? 'none')}`,
+    `prepareAge: ${(prepareAgeMs / 1000).toFixed(1)}s`,
     `result: ${String(executeClassification.resultField ?? 'unknown')}`,
     `receipt.source: ${String(executeClassification.receiptSource ?? 'unknown')}`,
     `userOpHash: ${String(executePayload.userOpHash ?? '')}`,
