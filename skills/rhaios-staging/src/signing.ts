@@ -9,6 +9,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { getUserOperationHash } from 'viem/account-abstraction';
+import { type NonceManager, type PublicClientLike } from './nonce-manager.ts';
 import { type ResolvedChain, type SignerBackend } from './types.ts';
 
 const ENTRYPOINT_ADDRESS = '0x0000000071727De22E5E9d8BAf0edAc6f37da032' as Address;
@@ -248,12 +249,11 @@ export async function signPreparedPayload(
     preparePayload: Record<string, unknown>;
     signer: LocalAccount;
     chain: ResolvedChain;
-    publicClient: {
-      getTransactionCount: (args: { address: Address }) => Promise<number | bigint>;
-    };
+    publicClient: PublicClientLike;
+    nonceManager?: NonceManager;
   },
 ): Promise<SignPreparedResult> {
-  const { preparePayload, signer, chain, publicClient } = params;
+  const { preparePayload, signer, chain, publicClient, nonceManager } = params;
   const envelope = parseIntentEnvelope(preparePayload.intentEnvelope);
 
   if (envelope.chainId !== chain.chainId) {
@@ -301,12 +301,18 @@ export async function signPreparedPayload(
       throw new Error('intentEnvelope.eip7702AuthRequest is invalid.');
     }
 
-    const txCount = await publicClient.getTransactionCount({ address: signer.address });
-    const nonce = typeof authRequest.nonce === 'number'
-      ? authRequest.nonce
-      : typeof authRequest.nonce === 'string'
-        ? Number(authRequest.nonce)
-        : Number(txCount);
+    // Use nonce from intent envelope if explicitly provided, otherwise use the
+    // nonce manager (pending-aware) or fall back to a direct chain read.
+    let nonce: number;
+    if (typeof authRequest.nonce === 'number') {
+      nonce = authRequest.nonce;
+    } else if (typeof authRequest.nonce === 'string') {
+      nonce = Number(authRequest.nonce);
+    } else if (nonceManager) {
+      nonce = Number(await nonceManager.peekNextNonce(publicClient, signer.address, chain.chainId));
+    } else {
+      nonce = Number(await publicClient.getTransactionCount({ address: signer.address, blockTag: 'pending' }));
+    }
 
     const auth = await signer.signAuthorization({
       contractAddress: authRequest.contractAddress as Address,

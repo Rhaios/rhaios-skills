@@ -6,6 +6,7 @@
   "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./nonce-manager": "./src/nonce-manager.ts",
     "./signing": "./src/signing.ts",
     "./types": "./src/types.ts",
     "./client": "./src/client.ts",

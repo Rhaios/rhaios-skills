@@ -9,6 +9,7 @@ import {
   type Hex,
 } from 'viem';
 import { callApi } from '../src/client.ts';
+import { NonceManager } from '../src/nonce-manager.ts';
 import { runPreparePreflight } from '../src/preflight.ts';
 import { createSigner, getPrepareGasInfo, signPreparedPayload } from '../src/signing.ts';
 import { isRecord, type PrepareSignExecuteRequest, type ResolvedChain, type ChainSlug } from '../src/types.ts';
@@ -713,6 +714,7 @@ async function main(): Promise<void> {
     chain: preflight.chain.chain,
     transport: rpcTransport(preflight.chainRpcUrl),
   });
+  const nonceManager = new NonceManager();
 
   const signer = createSigner({
     signerBackend: preflight.signerBackend,
@@ -782,7 +784,7 @@ async function main(): Promise<void> {
     let setupTxHash: Hex;
     let setupReceipt: { status: string; blockNumber: string };
     try {
-      const txNonce = BigInt(await publicClient.getTransactionCount({ address: preflight.walletAddress }));
+      const txNonce = await nonceManager.acquireNonce(publicClient, preflight.walletAddress, preflight.chain.chainId);
 
       // Gas estimation: trust yield_prepare's server-side values (already fork-aware via
       // resolveRpcUrl) but apply a 2x buffer and enforce a minimum floor of 1 gwei.
@@ -908,7 +910,9 @@ async function main(): Promise<void> {
         status: String(relayPayload.receiptStatus ?? 'unknown'),
         blockNumber: String(relayPayload.blockNumber ?? 'unknown'),
       };
+      nonceManager.confirmNonce(preflight.walletAddress, preflight.chain.chainId, txNonce);
     } catch (error) {
+      nonceManager.failNonce(preflight.walletAddress, preflight.chain.chainId, txNonce);
       const detail = error instanceof Error ? error.message : String(error);
       failStage(
         'Setup',
@@ -918,6 +922,7 @@ async function main(): Promise<void> {
       );
     }
     if (setupReceipt.status !== 'success') {
+      nonceManager.failNonce(preflight.walletAddress, preflight.chain.chainId, txNonce);
       failStage(
         'Setup',
         'Setup transaction reverted',
@@ -1001,6 +1006,7 @@ async function main(): Promise<void> {
       signer,
       chain: preflight.chain,
       publicClient,
+      nonceManager,
     });
   } catch (error) {
     failStage(
